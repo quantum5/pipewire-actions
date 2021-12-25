@@ -1,0 +1,42 @@
+#!/bin/bash
+set -xeuo pipefail
+
+. /etc/os-release
+
+# Make GPG work on default runners
+mkdir -p ~/.gnupg
+chmod 700 ~/.gnupg
+
+# Basic dependencies to use script
+sudo apt-get -t "$VERSION_CODENAME-backports" install debhelper devscripts debian-keyring equivs
+
+if [ "${VERSION_ID%.*}" -lt 21 ]; then
+  # mini-soong and dependencies for libldac
+  wget http://azure.archive.ubuntu.com/ubuntu/pool/universe/m/mini-soong/mini-soong_0.20201028_all.deb
+  wget http://azure.archive.ubuntu.com/ubuntu/pool/universe/m/meson/meson_0.57.0+really0.56.2-0.1_all.deb
+  sudo apt-get install ./*.deb
+  rm -f *.deb
+
+  # Build and install libldac
+  dget http://deb.debian.org/debian/pool/main/libl/libldac/libldac_2.0.2.3+git20200429+ed310a0-4.dsc
+  pushd libldac-*
+  DEBFULLNAME=Quantum DEBEMAIL=me@quantum2.xyz dch --bpo "Backporting to $VERSION_CODENAME"
+  DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -us -uc -b "-j$(nproc)"
+  popd
+  sudo dpkg -i libldac*.deb
+fi
+
+# Fetch source code
+dget "http://deb.debian.org/debian/pool/main/p/pipewire/pipewire_$(cat version).dsc"
+pushd pipewire-*
+
+# Install dependencies
+sudo mk-build-deps --install --remove --tool 'apt-get -o Debug::pkgProblemResolver=yes --no-install-recommends -y'
+
+# Build backports
+DEBFULLNAME=Quantum DEBEMAIL=me@quantum2.xyz dch --bpo "Backporting to $VERSION_CODENAME"
+DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -us -uc -b "-j$(nproc)"
+
+# Build "repository"
+popd
+dpkg-scanpackages . | gzip > Packages.gz
