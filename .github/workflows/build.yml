@@ -1,0 +1,32 @@
+name: build
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build PipeWire
+        run: ./build
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: PipeWire
+          path: |
+            *.deb
+            Release
+            Packages.gz
+  release:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: build
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v2
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: '*/*'
+          tag: release-${{ github.sha }}
+          overwrite: true
+          file_glob: true
